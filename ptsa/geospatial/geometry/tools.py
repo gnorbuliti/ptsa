@@ -3,13 +3,11 @@ from __future__ import annotations
 import geographiclib.geodesic
 import numpy
 import shapely
-import shapely.ops
 
-from sptg_geospatial.equation.line import LineEquation
-from sptg_geospatial.geometry.constant import transform_3857_to_4326, transform_4326_to_3857
-from sptg_geospatial.geometry.enumeration import EPSG_Type
-from sptg_geospatial.geometry.linestring import GeometryLineString
-from sptg_geospatial.geometry.point import GeometryPoint
+from ptsa.geospatial.equation.line import LineEquation
+from ptsa.geospatial.geometry.enumeration import EPSG_Type
+from ptsa.geospatial.geometry.linestring import GeometryLineString
+from ptsa.geospatial.geometry.point import GeometryPoint
 
 
 def project_point(reference_origin: GeometryPoint, reference_destination: GeometryPoint, candidate_origin: GeometryPoint | None = None, distance_metre: float | None = None) -> GeometryPoint:
@@ -33,11 +31,12 @@ def compute_baseline_point(reference_origin: GeometryPoint, reference_destinatio
     return GeometryPoint(x1, y1, EPSG_Type.EPSG_3857)
 
 
-def compute_intersect_point(reference_origin:GeometryPoint, reference_destination: GeometryPoint, candidate_origin: GeometryPoint, candidate_baseline: GeometryPoint) -> GeometryPoint:
+def compute_intersect_point(reference_origin: GeometryPoint, reference_destination: GeometryPoint, candidate_origin: GeometryPoint, candidate_baseline: GeometryPoint) -> GeometryPoint:
     reference = LineEquation.from_points(reference_origin.EPSG_3857.x, reference_origin.EPSG_3857.y, reference_destination.EPSG_3857.x, reference_destination.EPSG_3857.y)
     candidate = LineEquation.from_points(candidate_origin.EPSG_3857.x, candidate_origin.EPSG_3857.y, candidate_baseline.EPSG_3857.x, candidate_baseline.EPSG_3857.y)
     intersection: shapely.Point = reference.intersection_point(candidate)
     return GeometryPoint(intersection.y, intersection.x, EPSG_Type.EPSG_3857)
+
 
 def bezier_connection(reference_origin: GeometryPoint, reference_destination: GeometryPoint, candidate_baseline: GeometryPoint, candidate_origin: GeometryPoint, handle_factor=0.35, n=50):
     oa, ob = map(numpy.asarray, ((reference_origin.EPSG_4326.x, reference_origin.EPSG_4326.y), (reference_destination.EPSG_4326.x, reference_destination.EPSG_4326.y)))
