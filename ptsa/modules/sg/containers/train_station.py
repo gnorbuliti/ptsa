@@ -13,6 +13,10 @@ class TrainStationPolygon(GeometryPolygon):
         self.codes: set[str] = set()
         self.index: int = -1
 
+    def simplify_polygon(self, tolerance_metre=0.05):
+        item: GeometryPolygon = self.simplify(tolerance_metre)
+        super().__init__(EPSG_Type.EPSG_4326, item.EPSG_4326_coordinates)
+
 
 class TrainStation:
     def __init__(self, row: tuple[Any, ...]):

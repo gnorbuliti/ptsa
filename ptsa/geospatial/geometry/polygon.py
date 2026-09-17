@@ -9,6 +9,18 @@ from ptsa.geospatial.geometry.enumeration import EPSG_Type
 
 
 class GeometryPolygon(GeometryCore[list[list[Coordinate]], shapely.Polygon]):
+    @property
+    def EPSG_3857_coordinates(self) -> list[list[Coordinate]]:
+        coordinates: list[list[Coordinate]] = [list(self.EPSG_3857.exterior.coords)]
+        coordinates.extend([list(interior.coords) for interior in self.EPSG_3857.interiors])
+        return coordinates
+
+    @property
+    def EPSG_4326_coordinates(self) -> list[list[Coordinate]]:
+        coordinates: list[list[Coordinate]] = [list(self.EPSG_4326.exterior.coords)]
+        coordinates.extend([list(interior.coords) for interior in self.EPSG_4326.interiors])
+        return coordinates
+
     def __init__(self, EPSG: EPSG_Type, coordinates: list[list[Coordinate]], tags: dict[str, Any] | None = None):
         super().__init__(EPSG, tags)
         self.item = shapely.Polygon(coordinates[0], *coordinates[1:])
@@ -27,4 +39,4 @@ class GeometryPolygon(GeometryCore[list[list[Coordinate]], shapely.Polygon]):
         simplified: shapely.Polygon = self.EPSG_3857.simplify(tolerance=tolerance_metre, preserve_topology=True)
         coordinates: list[list[Coordinate]] = [list(simplified.exterior.coords)]
         coordinates.extend(list(interior.coords) for interior in simplified.interiors)
-        return GeometryPolygon(EPSG_Type.EPSG_4326, coordinates, self.category)
+        return GeometryPolygon(EPSG_Type.EPSG_3857, coordinates, self.category)

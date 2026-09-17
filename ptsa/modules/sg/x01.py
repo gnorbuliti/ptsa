@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import enum
 import pathlib
+from collections import defaultdict
 
 import geopandas
 import shapely
@@ -69,6 +70,7 @@ class MainRoutine(ApplicationModulePackage):
             coordinates: list[list[Coordinate]] = [list(i.geometry.exterior.coords)]
             coordinates.extend([list(interior.coords) for interior in i.geometry.interiors])
             item = TrainStationPolygon(EPSG_Type.EPSG_4326, coordinates)
+            item.simplify_polygon()
             item.name = str(i.NAME).lower()
             item.tags["INC_CRC"] = str(i.INC_CRC)
             self.train_station_polygons.append(item)
@@ -98,9 +100,17 @@ class MainRoutine(ApplicationModulePackage):
         print(f"No polygon was assigned to [{(', '.join([i.code for i in self.train_stations if len(i.polygons) == 0]))}].")
 
     async def task_export_train_station_geojson(self, output_path: pathlib.Path):
-        df = geopandas.GeoDataFrame(geometry=[i.EPSG_4326 for i in self.train_station_polygons], crs="EPSG:4326")
-        df["id"] = range(1, len(df) + 1)
-        df["codes"] = [",".join(i.codes) for i in self.train_station_polygons]
+        grouped = defaultdict(list)
+        for item in self.train_station_polygons:
+            grouped[item.tags["INC_CRC"]].append(item)
+
+        grouped_dict: dict[str, list[TrainStationPolygon]] = dict(grouped)
+        for items in grouped_dict.values():
+            for index, item in enumerate(items):
+                item.index = f"{item.tags['INC_CRC']}_{index}"
+
+        data = [{"geometry": polygon.EPSG_4326, "id": polygon.index, "codes": ",".join(sorted(polygon.codes)), "remove": False} for polygon in self.train_station_polygons]
+        df = geopandas.GeoDataFrame(data, crs="EPSG:4326")
         df.to_file(output_path, driver="GeoJSON")
 
 

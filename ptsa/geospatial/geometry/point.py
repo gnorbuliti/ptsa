@@ -10,6 +10,21 @@ from ptsa.geospatial.geometry.enumeration import EPSG_Type
 
 
 class GeometryPoint(GeometryCore[Coordinate, shapely.Point]):
+    @property
+    def EPSG_4326_yx(self) -> str:
+        item = self.EPSG_4326
+        return f"{item.y},{item.x}"
+    
+    @property
+    def EPSG_4326_xy(self) -> str:
+        item = self.EPSG_4326
+        return f"{item.x},{item.y}"
+
+    @property
+    def EPSG_3857_xy(self) -> str:
+        item = self.EPSG_3857
+        return f"{item.y},{item.x}"
+
     def __init__(self, EPSG: EPSG_Type, latitude: float, longitude: float, tags: dict[str, Any] | None = None):
         super().__init__(EPSG, tags)
         self.item = shapely.Point(longitude, latitude)

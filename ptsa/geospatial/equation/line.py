@@ -77,17 +77,17 @@ class LineEquation:
         else:
             return LineEquation.from_gradient(-1.0 / self.gradient, x1, y1)
 
-    def nearest_point_on_line(self, x1: float, y1: float) -> tuple[float, float]:
+    def nearest_point_on_line(self, x1: float, y1: float) -> shapely.Point:
         if any(value is None or math.isnan(value) for value in [x1, y1]):
-            return (float("nan"), float("nan"))
+            return shapely.Point(float("nan"), float("nan"))
         elif self.gradient is None:
-            return (self.x_intercept, y1)
+            return shapely.Point(self.x_intercept, y1)
         elif self.gradient == 0:
-            return (x1, self.y_intercept)
+            return shapely.Point(x1, self.y_intercept)
         else:
             xo = (x1 + self.gradient * (y1 - self.y_intercept)) / ((self.gradient**2) + 1)
             yo = self.gradient * xo + self.y_intercept
-            return (xo, yo)
+            return shapely.Point(xo, yo)
 
     def intersection_point(self, candidate: LineEquation) -> shapely.Point | None:
         if self.gradient is None and candidate.gradient is None:
