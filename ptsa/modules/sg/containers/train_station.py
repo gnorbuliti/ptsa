@@ -6,14 +6,12 @@ from ptsa.geospatial.geometry.point import GeometryPoint
 from ptsa.geospatial.geometry.polygon import GeometryPolygon
 
 
-class TrainStationPolygon(GeometryPolygon):
+class TrainStationGeometry(GeometryPolygon):
     def __init__(self, EPSG: EPSG_Type, coordinates: list[list[Coordinate]]):
         super().__init__(EPSG, coordinates)
-        self.name: str = ""
         self.codes: set[str] = set()
-        self.index: int = -1
 
-    def simplify_polygon(self, tolerance_metre=0.05):
+    def simplify_polygon(self, tolerance_metre: float):
         item: GeometryPolygon = self.simplify(tolerance_metre)
         super().__init__(EPSG_Type.EPSG_4326, item.EPSG_4326_coordinates)
 
@@ -28,5 +26,11 @@ class TrainStation:
         self.altitude: float = row[11]
 
         self.point.tags["code"] = self.code
-        self.polygons: list[TrainStationPolygon] = []
+        self.polygons: list[TrainStationGeometry] = []
         self.english_lower: str = self.english.lower()
+
+
+class TrainStationDistance:
+    def __init__(self, station: TrainStation, distance: float):
+        self.station: TrainStation = station
+        self.distance: float = distance

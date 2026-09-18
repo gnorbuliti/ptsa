@@ -14,7 +14,7 @@ class GeometryPoint(GeometryCore[Coordinate, shapely.Point]):
     def EPSG_4326_yx(self) -> str:
         item = self.EPSG_4326
         return f"{item.y},{item.x}"
-    
+
     @property
     def EPSG_4326_xy(self) -> str:
         item = self.EPSG_4326

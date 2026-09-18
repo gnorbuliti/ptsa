@@ -35,7 +35,7 @@ class GeometryPolygon(GeometryCore[list[list[Coordinate]], shapely.Polygon]):
         else:
             return GeometryPolygon(EPSG_Type.EPSG_4326, coordinates, self.category)
 
-    def simplify(self, tolerance_metre=0.05) -> GeometryPolygon:
+    def simplify(self, tolerance_metre: float) -> GeometryPolygon:
         simplified: shapely.Polygon = self.EPSG_3857.simplify(tolerance=tolerance_metre, preserve_topology=True)
         coordinates: list[list[Coordinate]] = [list(simplified.exterior.coords)]
         coordinates.extend(list(interior.coords) for interior in simplified.interiors)

@@ -16,8 +16,8 @@ class GeometryLineString(GeometryCore[list[Coordinate], shapely.LineString]):
         super().__init__(EPSG, tags)
         self.item = shapely.LineString(coordinates)
         self.key: bytes = self.EPSG_4326.wkb
-        self.start: GeometryPointBearing = GeometryPointBearing.from_coordinates(self.EPSG_4326.coords[1], self.EPSG_4326.coords[0])
-        self.end: GeometryPointBearing = GeometryPointBearing.from_coordinates(self.EPSG_4326.coords[-2], self.EPSG_4326.coords[-1])
+        self.start: GeometryPointBearing = GeometryPointBearing.from_coordinates(EPSG_Type.EPSG_4326, self.EPSG_4326.coords[1], self.EPSG_4326.coords[0])
+        self.end: GeometryPointBearing = GeometryPointBearing.from_coordinates(EPSG_Type.EPSG_4326, self.EPSG_4326.coords[-2], self.EPSG_4326.coords[-1])
 
         WGS84 = geographiclib.geodesic.Geodesic.WGS84
         inv: dict[str, float] = WGS84.Inverse(self.start.destination.EPSG_4326.y, self.start.destination.EPSG_4326.x, self.end.destination.EPSG_4326.y, self.end.destination.EPSG_4326.x)
@@ -34,7 +34,7 @@ class GeometryLineString(GeometryCore[list[Coordinate], shapely.LineString]):
         else:
             return GeometryLineString(EPSG_Type.EPSG_4326, coordinates, self.tags)
 
-    def simplify(self, tolerance_metre: float = 0.05, in_place: bool = False) -> GeometryLineString:
+    def simplify(self, tolerance_metre: float, in_place: bool = False) -> GeometryLineString:
         simplified: shapely.LineString = self.EPSG_3857.simplify(tolerance=tolerance_metre, preserve_topology=True)
         if in_place:
             self.reset(EPSG_Type.EPSG_3857, list(simplified.coords))

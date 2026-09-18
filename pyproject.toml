@@ -12,7 +12,6 @@ dependencies = [
     "geopandas",
     "shapely"
 ]
-
 [project.optional-dependencies]
 dev = [    
     "black",
@@ -25,6 +24,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["ptsa*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

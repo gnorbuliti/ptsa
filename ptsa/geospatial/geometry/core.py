@@ -42,6 +42,8 @@ class GeometryCore[T, U: shapely.geometry.base.BaseGeometry]:
         self.item: shapely.geometry.base.BaseGeometry | None = None
         self._EPSG_4326: U | None = None
         self._EPSG_3857: U | None = None
+
+        self.identifier: str = ""
         self.tags: dict[str, Any] = tags or {}
 
     def reset(self, EPSG: EPSG_Type, coordinates: T):
