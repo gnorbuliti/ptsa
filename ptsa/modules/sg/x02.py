@@ -191,6 +191,7 @@ class MainRoutine(ApplicationModulePackage):
                 "end": linestring.end_station.code if linestring.end_station else "",
                 "merge": "",
                 "retain": True,
+                "reviewed": False,
             }
             for index, linestring in enumerate(self.train_line_geometries)
         ]
