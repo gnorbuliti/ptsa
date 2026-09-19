@@ -2,6 +2,7 @@
 
 ## Project
 - Use Python.
+- Do not supress error from ruff.
 
 ## Virtual Environment
 - Virtual environment is in 'venv' directory.

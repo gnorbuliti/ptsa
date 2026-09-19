@@ -4,6 +4,8 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from ptsa.workflow.time_tracker import TimeTracker
+
 
 class TrackedTask[T]:
     def __init__(self, stageCAT: T):
@@ -29,6 +31,7 @@ class ApplicationModulePackage[T]:
         self.task_conditions: dict[T, list[T]] = task_conditions
         self.task_tracker: dict[T, TrackedTask] = {}
         self.tasks: list[asyncio.Task[T]] = []
+        self.tracker = TimeTracker(interval_second=5.0)
 
     def task_add(self, stageCAT: T, task: Callable[..., Awaitable[Any]], *args: Any):
         if stageCAT in self.task_tracker:

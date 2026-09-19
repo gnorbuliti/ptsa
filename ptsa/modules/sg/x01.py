@@ -39,22 +39,23 @@ class MainRoutine(ApplicationModulePackage):
         self.train_stations: list[TrainStation] = []
 
     async def run(self, database_path: str, train_station_input_path: pathlib.Path, train_station_output_path: pathlib.Path):
+        self.tracker.start("x01")
         self.task_add(TaskType.TrainStation_Load_Database, self.task_load_train_stations_database, database_path)
-        self.task_add(TaskType.TrainStation_Load_GeoJSON, self.task_load_train_station_geojson, train_station_input_path)
-
+        self.task_add(TaskType.TrainStation_Load_GeoJSON, self.task_load_train_stations_geojson, train_station_input_path)
         while self.tasks:
             next_tasks: set[TaskType] = await self.task_next()
             for i in next_tasks:
                 match i:
                     case TaskType.TrainStation_AssignGeometry:
-                        self.task_add(i, self.task_train_station_assign_geometry, PRECISION)
+                        self.task_add(i, self.task_train_stations_assign_geometry, PRECISION)
                     case TaskType.TrainStation_Export_GeoJSON:
-                        self.task_add(i, self.task_export_train_station_geojson, train_station_output_path)
+                        self.task_add(i, self.task_export_train_stations_geojson, train_station_output_path)
+        self.tracker.stop()
 
     async def task_load_train_stations_database(self, database_path: str):
         self.train_stations = [TrainStation(i) for i in MainRoutine.task_read_database_table(database_path, "TrainStation")]
 
-    async def task_load_train_station_geojson(self, input_path: pathlib.Path):
+    async def task_load_train_stations_geojson(self, input_path: pathlib.Path):
         df: geopandas.GeoDataFrame = geopandas.read_file(input_path, engine="pyogrio", on_invalid="ignore")
         df = df.to_crs(epsg=4326).explode(ignore_index=True)
         df = df[df.geometry.notnull() & ~df.geometry.is_empty & df.geometry.is_valid]
@@ -73,7 +74,7 @@ class MainRoutine(ApplicationModulePackage):
             item.tags["INC_CRC"] = str(i.INC_CRC)
             self.train_station_geometries.append(item)
 
-    async def task_train_station_assign_geometry(self, threshold_distance: float) -> str:
+    async def task_train_stations_assign_geometry(self, threshold_distance: float) -> str:
         for train_station in self.train_stations:
             polygon_within: list[TrainStationGeometry] = [i for i in self.train_station_geometries if train_station.english_lower in i.tags["NAME"] or i.tags["NAME"] in train_station.english_lower]
             if len(polygon_within) == 1:
@@ -97,7 +98,7 @@ class MainRoutine(ApplicationModulePackage):
 
         print(f"No polygon was assigned to [{(', '.join([i.code for i in self.train_stations if len(i.polygons) == 0]))}].")
 
-    async def task_export_train_station_geojson(self, output_path: pathlib.Path):
+    async def task_export_train_stations_geojson(self, output_path: pathlib.Path):
         grouped = defaultdict(list)
         for item in self.train_station_geometries:
             grouped[item.tags["INC_CRC"]].append(item)
