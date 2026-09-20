@@ -11,6 +11,10 @@ class TrainLineGeometry(GeometryLineString):
         self.start_station: TrainStation = None
         self.end_station: TrainStation | None = None
 
+    def simplify_geometry(self, tolerance_metre: float):
+        item: GeometryLineString = self.simplify(tolerance_metre)
+        super().__init__(EPSG_Type.EPSG_4326, list(item.EPSG_4326.coords))
+
     @staticmethod
     def nearest_train_stations(train_stations: list[TrainStation], bearing_point: GeometryPointBearing, threshold_distance: float) -> list[TrainStationDistance]:
         distances: list[TrainStationDistance] = [TrainStationDistance(i, 0.0) for i in train_stations if any(j.EPSG_4326.covers(bearing_point.destination.EPSG_4326) for j in i.polygons)]

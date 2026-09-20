@@ -11,7 +11,7 @@ class TrainStationGeometry(GeometryPolygon):
         super().__init__(EPSG, coordinates)
         self.codes: set[str] = set()
 
-    def simplify_polygon(self, tolerance_metre: float):
+    def simplify_geometry(self, tolerance_metre: float):
         item: GeometryPolygon = self.simplify(tolerance_metre)
         super().__init__(EPSG_Type.EPSG_4326, item.EPSG_4326_coordinates)
 

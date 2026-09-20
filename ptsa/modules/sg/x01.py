@@ -69,10 +69,19 @@ class MainRoutine(ApplicationModulePackage):
             coordinates: list[list[Coordinate]] = [list(i.geometry.exterior.coords)]
             coordinates.extend([list(interior.coords) for interior in i.geometry.interiors])
             item = TrainStationGeometry(EPSG_Type.EPSG_4326, coordinates)
-            item.simplify_polygon(tolerance_metre=SIMPLIFICATION_METRE)
+            item.simplify_geometry(tolerance_metre=SIMPLIFICATION_METRE)
             item.tags["NAME"] = str(i.NAME).lower()
-            item.tags["INC_CRC"] = str(i.INC_CRC)
+            item.tags["OBJECTID"] = str(i.OBJECTID)
             self.train_station_geometries.append(item)
+
+        grouped = defaultdict(list)
+        for item in self.train_station_geometries:
+            grouped[item.tags["OBJECTID"]].append(item)
+
+        grouped_dict: dict[str, list[TrainStationGeometry]] = dict(grouped)
+        for items in grouped_dict.values():
+            for index, item in enumerate(items):
+                item.identifier = f"{item.tags['OBJECTID']}_{index}"
 
     async def task_train_stations_assign_geometry(self, threshold_distance: float) -> str:
         for train_station in self.train_stations:
@@ -99,15 +108,6 @@ class MainRoutine(ApplicationModulePackage):
         print(f"No polygon was assigned to [{(', '.join([i.code for i in self.train_stations if len(i.polygons) == 0]))}].")
 
     async def task_export_train_stations_geojson(self, output_path: pathlib.Path):
-        grouped = defaultdict(list)
-        for item in self.train_station_geometries:
-            grouped[item.tags["INC_CRC"]].append(item)
-
-        grouped_dict: dict[str, list[TrainStationGeometry]] = dict(grouped)
-        for items in grouped_dict.values():
-            for index, item in enumerate(items):
-                item.identifier = f"{item.tags['INC_CRC']}_{index}"
-
         output_path.parent.mkdir(parents=True, exist_ok=True)
         data = [{"geometry": polygon.EPSG_4326, "id": polygon.identifier, "codes": ",".join(sorted(polygon.codes)), "retain": True} for polygon in self.train_station_geometries]
         df = geopandas.GeoDataFrame(data, crs="EPSG:4326")
