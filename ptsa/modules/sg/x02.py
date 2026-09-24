@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import enum
 import pathlib
+import sqlite3
 from collections import defaultdict
 
 import geopandas
@@ -22,6 +23,7 @@ class TaskType(enum.IntEnum):
 
     TrainStation_AssignGeometry = 200
     TrainStation_Export_GeoJSON = 201
+    TrainStation_Export_Database = 202
 
     TrainLine_Export_GeoJSON_Original = 300
     TrainLine_Merge = 301
@@ -71,12 +73,13 @@ class MainRoutine(ApplicationModulePackage):
         while self.tasks:
             next_tasks: set[TaskType] = await self.task_next()
             for i in next_tasks:
-                print(i.name)
                 match i:
                     case TaskType.TrainStation_AssignGeometry:
                         self.task_add(i, self.task_train_stations_assign_geometry)
                     case TaskType.TrainStation_Export_GeoJSON:
                         self.task_add(i, self.task_export_train_station_geojson, train_station_output_path)
+                    case TaskType.TrainStation_Export_Database:
+                        self.task_add(i, self.task_export_train_station_database, database_path)
                     case TaskType.TrainLine_Export_GeoJSON_Original:
                         self.task_add(i, self.task_export_train_lines_geojson_original, train_line_output_path_original)
                     case TaskType.TrainLine_Merge:
@@ -124,6 +127,31 @@ class MainRoutine(ApplicationModulePackage):
         data = [{"geometry": polygon.EPSG_4326, "id": polygon.identifier, "codes": ",".join(sorted(polygon.codes))} for polygon in self.train_station_geometries]
         df = geopandas.GeoDataFrame(data, crs="EPSG:4326")
         df.to_file(output_path, driver="GeoJSON")
+
+    async def task_export_train_station_database(self, database_path: str):
+        table_name = "TrainStation"
+        column_name = "Geometry"
+        column_type = "TEXT"
+
+        connection = sqlite3.connect(database_path)
+        cursor = connection.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if column_name not in columns:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+            connection.commit()
+
+        for train_station in self.train_stations:
+            if train_station.polygons:
+                polygon: str = ",".join([f"{i[1]},{i[0]}" for i in train_station.polygons[0].EPSG_4326.exterior.coords])
+                cursor.execute(f"UPDATE {table_name} SET Geometry=? WHERE Code=?", (polygon, train_station.code))
+                connection.commit()
+            else:
+                cursor.execute(f"UPDATE {table_name} SET Geometry=? WHERE Code=?", ("", train_station.code))
+            connection.commit()
+
+        connection.close()
 
     async def task_load_geojson_train_lines(self, input_path: pathlib.Path):
         df: geopandas.GeoDataFrame = geopandas.read_file(input_path, engine="pyogrio", on_invalid="ignore")
@@ -173,7 +201,7 @@ class MainRoutine(ApplicationModulePackage):
                     candidate_indices = endpoint_indices[joint] - {reference_index}
                     if len(candidate_indices) != 1:
                         continue
-                    
+
                     candidate_index = candidate_indices.pop()
                     candidate = active[candidate_index]
                     candidate_coordinates = coordinates_by_index[candidate_index]
@@ -219,8 +247,8 @@ class MainRoutine(ApplicationModulePackage):
     @staticmethod
     def task_train_line_assign_train_stations(args: tuple[TrainLineGeometry, list[TrainStation]]) -> TrainLineGeometry:
         geometry, train_stations = args
-        start_stations: list[TrainStationDistance] = TrainLineGeometry.nearest_train_stations(train_stations, geometry.start, x02_MAXIMUM_DISPLACEMENT_METRE)
-        end_stations: list[TrainStationDistance] = TrainLineGeometry.nearest_train_stations(train_stations, geometry.end, x02_MAXIMUM_DISPLACEMENT_METRE)
+        start_stations: list[TrainStationDistance] = TrainLineGeometry.nearest_train_stations(train_stations, geometry.start_code, x02_MAXIMUM_DISPLACEMENT_METRE)
+        end_stations: list[TrainStationDistance] = TrainLineGeometry.nearest_train_stations(train_stations, geometry.end_code, x02_MAXIMUM_DISPLACEMENT_METRE)
         if not start_stations and not end_stations:
             return geometry
         elif not start_stations:
@@ -263,7 +291,6 @@ class MainRoutine(ApplicationModulePackage):
                 "end": linestring.end_station.code if linestring.end_station else "",
                 "merge": "",
                 "retain": True,
-                "reviewed": False,
             }
             for linestring in self.train_line_geometries
         ]
