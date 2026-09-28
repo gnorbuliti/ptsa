@@ -48,7 +48,7 @@ class GeometryCore[T, U: shapely.geometry.base.BaseGeometry]:
 
     def reset(self, EPSG: EPSG_Type, coordinates: T):
         self.category = EPSG
-        self.item = U(coordinates)
+        self.item = type(self.item)(coordinates)
         self._EPSG_4326: U | None = None
         self._EPSG_3857: U | None = None
 

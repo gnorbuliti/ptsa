@@ -6,11 +6,18 @@ import pathlib
 import geopandas
 import shapely
 
-from ptsa.geospatial.geometry.core import Coordinate
+from ptsa.geospatial.geometry.core import Coordinate, GeometryCore
 from ptsa.geospatial.geometry.enumeration import EPSG_Type
 from ptsa.modules.sg.constants import PRECISION, SIMPLIFICATION_METRE, x03_MAXIMUM_ANGLE_DEGREE, x03_MAXIMUM_DISPLACEMENT_METRE
 from ptsa.modules.sg.containers.train_line import TrainLineGeometry
 from ptsa.workflow.task_manager import ApplicationModulePackage
+
+
+class TrainLineMergedType(enum.IntEnum):
+    ES = 1
+    EE = 2
+    SS = 3
+    SE = 4
 
 
 class TrainLineGeometryx03(TrainLineGeometry):
@@ -27,13 +34,52 @@ class TrainLineGeometryx03(TrainLineGeometry):
         self.start_code: str = ""
         self.end_code: str = ""
         self.merge_ids: set[str] = set()
-        self.merged: set[str] = set()
+        self.merged_with: set[str] = set()
+
+
+class TrainLineMergedGeometry:
+    def __init__(self, CAT: TrainLineMergedType, reference: TrainLineGeometryx03, candidate: TrainLineGeometryx03, maximum_displacement_metre: float, maximum_angle_degree: float):
+        self.CAT = CAT
+        match CAT:
+            case TrainLineMergedType.ES:
+                self.distance: float = reference.end.vertex.EPSG_3857.distance(candidate.start.vertex.EPSG_3857)
+                self.start_code: str = reference.start_code
+                self.end_code: str = candidate.end_code
+                self.EPSG_4326_coordinates: list[Coordinate] = list(reference.EPSG_4326.coords) + list(candidate.EPSG_4326.coords)
+                self.is_valid: bool = self.distance <= maximum_displacement_metre and GeometryCore.are_opposite_direction_degree(
+                    reference.end.bearing_degree, candidate.start.bearing_degree, maximum_angle_degree
+                )
+            case TrainLineMergedType.EE:
+                self.distance: float = reference.end.vertex.EPSG_3857.distance(candidate.end.vertex.EPSG_3857)
+                self.start_code: str = reference.start_code
+                self.end_code: str = candidate.start_code
+                self.EPSG_4326_coordinates: list[Coordinate] = list(reference.EPSG_4326.coords) + list(candidate.EPSG_4326.coords)[::-1]
+                self.is_valid: bool = self.distance <= maximum_displacement_metre and GeometryCore.are_opposite_direction_degree(
+                    reference.end.bearing_degree, candidate.end.bearing_degree, maximum_angle_degree
+                )
+            case TrainLineMergedType.SS:
+                self.distance: float = reference.start.vertex.EPSG_3857.distance(candidate.start.vertex.EPSG_3857)
+                self.start_code: str = reference.end_code
+                self.end_code: str = candidate.end_code
+                self.EPSG_4326_coordinates: list[Coordinate] = list(reference.EPSG_4326.coords)[::-1] + list(candidate.EPSG_4326.coords)
+                self.is_valid: bool = self.distance <= maximum_displacement_metre and GeometryCore.are_opposite_direction_degree(
+                    reference.start.bearing_degree, candidate.start.bearing_degree, maximum_angle_degree
+                )
+            case TrainLineMergedType.SE:
+                self.distance: float = reference.start.vertex.EPSG_3857.distance(candidate.end.vertex.EPSG_3857)
+                self.start_code: str = reference.end_code
+                self.end_code: str = candidate.start_code
+                self.EPSG_4326_coordinates: list[Coordinate] = list(reference.EPSG_4326.coords)[::-1] + list(candidate.EPSG_4326.coords)[::-1]
+                self.is_valid: bool = self.distance <= maximum_displacement_metre and GeometryCore.are_opposite_direction_degree(
+                    reference.start.bearing_degree, candidate.end.bearing_degree, maximum_angle_degree
+                )
 
 
 class TaskType(enum.IntEnum):
     TrainLine_Load_GeoJSON = 100
     TrainLine_Merge = 101
-    TrainLine_Export_GeoJSON = 102
+    TrainLine_Export_GeoJSON_Merged = 102
+    TrainLine_Export_GeoJSON_Unmerged = 103
 
 
 class MainRoutine(ApplicationModulePackage):
@@ -41,17 +87,20 @@ class MainRoutine(ApplicationModulePackage):
         super().__init__(
             {
                 TaskType.TrainLine_Load_GeoJSON: [TaskType.TrainLine_Merge],
-                TaskType.TrainLine_Merge: [TaskType.TrainLine_Export_GeoJSON],
+                TaskType.TrainLine_Merge: [TaskType.TrainLine_Export_GeoJSON_Merged, TaskType.TrainLine_Export_GeoJSON_Unmerged],
             },
             {
                 TaskType.TrainLine_Merge: [TaskType.TrainLine_Load_GeoJSON],
-                TaskType.TrainLine_Export_GeoJSON: [TaskType.TrainLine_Merge],
+                TaskType.TrainLine_Export_GeoJSON_Merged: [TaskType.TrainLine_Merge],
+                TaskType.TrainLine_Export_GeoJSON_Unmerged: [TaskType.TrainLine_Merge],
             },
         )
 
-        self.train_line_geometries: list[TrainLineGeometry] = []
+        self.train_line_geometries: list[TrainLineGeometryx03] = []
+        self.merged: list[TrainLineGeometryx03] = []
+        self.unmerged: list[TrainLineGeometryx03] = []
 
-    async def run(self, train_line_input_path: pathlib.Path, train_line_output_path: pathlib.Path):
+    async def run(self, train_line_input_path: pathlib.Path, train_line_output_path_merged: pathlib.Path, train_line_output_path_unmerged: pathlib.Path):
         self.tracker.start("x03")
         self.task_add(TaskType.TrainLine_Load_GeoJSON, self.task_load_geojson_train_lines, train_line_input_path)
         while self.tasks:
@@ -60,8 +109,10 @@ class MainRoutine(ApplicationModulePackage):
                 match i:
                     case TaskType.TrainLine_Merge:
                         self.task_add(i, self.task_train_lines_merge)
-                    case TaskType.TrainLine_Export_GeoJSON:
-                        self.task_add(i, self.task_export_train_lines_geojson, train_line_output_path)
+                    case TaskType.TrainLine_Export_GeoJSON_Merged:
+                        self.task_add(i, self.task_export_train_lines_geojson, self.merged, train_line_output_path_merged)
+                    case TaskType.TrainLine_Export_GeoJSON_Unmerged:
+                        self.task_add(i, self.task_export_train_lines_geojson, self.unmerged, train_line_output_path_unmerged)
         self.tracker.stop()
 
     async def task_load_geojson_train_lines(self, input_path: pathlib.Path):
@@ -80,26 +131,24 @@ class MainRoutine(ApplicationModulePackage):
                 item.start_code = str(i.start)
                 item.end_code = str(i.end)
                 item.merge_ids = {j for j in str(i.merge).split(",") if j and j != item.identifier}
-                item.merged.add(item.identifier)
+                item.merged_with.add(item.identifier)
                 self.train_line_geometries.append(item)
 
     async def task_train_lines_merge(self) -> str:
         self.error_ids: list[str] = []
-        self.matched: list[TrainLineGeometryx03] = []
-        self.merging: list[TrainLineGeometryx03] = []
 
         for i in self.train_line_geometries:
             if bool(i.start_code and i.end_code):
                 if i.start_code == i.end_code or i.merge_ids:
                     self.error_ids.append(i.identifier)
                 else:
-                    self.matched.append(i)
+                    self.merged.append(i)
             else:
-                self.merging.append(i)
+                self.unmerged.append(i)
 
-        segments: dict[str, TrainLineGeometryx03] = {i.identifier: i for i in self.merging}
+        segments: dict[str, TrainLineGeometryx03] = {i.identifier: i for i in self.unmerged}
 
-        for i in self.merging:
+        for i in self.unmerged:
             for j in i.merge_ids:
                 segment: TrainLineGeometryx03 | None = segments.get(j)
                 if segment is not None:
@@ -119,7 +168,7 @@ class MainRoutine(ApplicationModulePackage):
 
     def task_train_lines_merge_item(self, segments: dict[str, TrainLineGeometryx03], reference: TrainLineGeometryx03) -> bool:
         candidates: list[TrainLineGeometryx03] = []
-        for i in reference.merge_ids:
+        for i in list(reference.merge_ids):
             item: TrainLineGeometryx03 | None = segments.get(i)
             if item is None:
                 continue
@@ -134,7 +183,7 @@ class MainRoutine(ApplicationModulePackage):
 
         for i in candidates:
             if i.is_matched:
-                self.matched.append(i)
+                self.merged.append(i)
                 del segments[i.identifier]
 
         for i in candidates:
@@ -143,18 +192,39 @@ class MainRoutine(ApplicationModulePackage):
 
         return True
 
-    def merge(self, reference: TrainLineGeometryx03, candidate: TrainLineGeometryx03, MAXIMUM_DISPLACEMENT_METRE: float, MAXIMUM_ANGLE_DEGREE: float):
-        pass
-
-    async def task_export_train_lines_geojson(self, output_path: pathlib.Path):
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        data = [
-            {
-                "geometry": linestring.EPSG_4326,
-                "rotate": False,
-            }
-            for linestring in self.train_line_geometries
+    def merge(self, reference: TrainLineGeometryx03, candidate: TrainLineGeometryx03, maximum_displacement_metre: float, maximum_angle_degree: float):
+        distances: list[TrainLineMergedGeometry] = [
+            TrainLineMergedGeometry(TrainLineMergedType.ES, reference, candidate, maximum_displacement_metre, maximum_angle_degree),
+            TrainLineMergedGeometry(TrainLineMergedType.EE, reference, candidate, maximum_displacement_metre, maximum_angle_degree),
+            TrainLineMergedGeometry(TrainLineMergedType.SS, reference, candidate, maximum_displacement_metre, maximum_angle_degree),
+            TrainLineMergedGeometry(TrainLineMergedType.SE, reference, candidate, maximum_displacement_metre, maximum_angle_degree),
         ]
+        distances = [i for i in distances if i.is_valid]
+
+        if not distances:
+            return None
+
+        distances.sort(key=lambda x: x.distance)
+        nearest: TrainLineMergedGeometry = distances[0]
+
+        candidate.reset(EPSG_Type.EPSG_4326, nearest.EPSG_4326_coordinates)
+        candidate.start_code = nearest.start_code
+        candidate.end_code = nearest.end_code
+
+        reference.merge_ids.remove(candidate.identifier)
+        candidate.merge_ids.remove(reference.identifier)
+
+        reference.merged_with.add(candidate.identifier)
+        candidate.merged_with.add(reference.identifier)
+
+        candidate.merged_with = candidate.merged_with.union(reference.merged_with)
+        reference = reference.merged_with.union(candidate.merged_with)
+
+        return self
+
+    async def task_export_train_lines_geojson(self, items: list[TrainLineGeometryx03], output_path: pathlib.Path):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        data = [{"geometry": linestring.EPSG_4326, "rotate": False} for linestring in items]
         df = geopandas.GeoDataFrame(data, crs="EPSG:4326")
         df.to_file(output_path, driver="GeoJSON")
 
@@ -162,11 +232,12 @@ class MainRoutine(ApplicationModulePackage):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("train_Line_input_path", type=pathlib.Path, help="Path to the Train Line Input GeoJSON file")
-    parser.add_argument("train_Line_output_path", type=pathlib.Path, help="Path to the Train Line Output GeoJSON file")
+    parser.add_argument("train_Line_output_path_merged", type=pathlib.Path, help="Path to the Merged Train Line Output GeoJSON file")
+    parser.add_argument("train_Line_output_path_unmerged", type=pathlib.Path, help="Path to the Unmerged Train Line Output GeoJSON file")
     args: argparse.Namespace = parser.parse_args()
 
     routine = MainRoutine()
     try:
-        asyncio.run(routine.run(args.train_Line_input_path, args.train_Line_output_path))
+        asyncio.run(routine.run(args.train_Line_input_path, args.train_Line_output_path_merged, args.train_Line_output_path_unmerged))
     except KeyboardInterrupt:
         pass

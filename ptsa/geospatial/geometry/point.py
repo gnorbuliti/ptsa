@@ -36,14 +36,14 @@ class GeometryPoint(GeometryCore[Coordinate, shapely.Point]):
 
 
 class GeometryPointBearing:
-    def __init__(self, EPSG: EPSG_Type, origin: GeometryPoint, destination: GeometryPoint):
+    def __init__(self, EPSG: EPSG_Type, preceding: GeometryPoint, vertex: GeometryPoint):
         self.category: EPSG_Type = EPSG
-        self.origin: GeometryPoint = origin
-        self.destination: GeometryPoint = destination
-        self.key: bytes = self.origin.key + self.destination.key
+        self.preceding: GeometryPoint = preceding
+        self.vertex: GeometryPoint = vertex
+        self.key: bytes = self.preceding.key + self.vertex.key
         self.tags: dict[str, Any] = {}
 
-        result = geographiclib.geodesic.Geodesic.WGS84.Inverse(origin.EPSG_4326.y, origin.EPSG_4326.x, destination.EPSG_4326.y, destination.EPSG_4326.x)
+        result = geographiclib.geodesic.Geodesic.WGS84.Inverse(preceding.EPSG_4326.y, preceding.EPSG_4326.x, vertex.EPSG_4326.y, vertex.EPSG_4326.x)
         self.bearing_degree: float = result["azi1"]
         # self.bearing_degree = 0.0     [Destination is NORTH OF Origin]
         # self.bearing_degree = 90.0    [Destination is EAST OF Origin]
@@ -61,5 +61,5 @@ class GeometryPointBearing:
         return abs(diff - 180.0) <= threshold_degree
 
     @staticmethod
-    def from_coordinates(EPSG: EPSG_Type, origin: Coordinate, destination: Coordinate) -> GeometryPointBearing:
-        return GeometryPointBearing(EPSG, GeometryPoint.from_coordinate(EPSG, origin), GeometryPoint.from_coordinate(EPSG, destination))
+    def from_coordinates(EPSG: EPSG_Type, preceding: Coordinate, vertex: Coordinate) -> GeometryPointBearing:
+        return GeometryPointBearing(EPSG, GeometryPoint.from_coordinate(EPSG, preceding), GeometryPoint.from_coordinate(EPSG, vertex))

@@ -20,10 +20,10 @@ class GeometryLineString(GeometryCore[list[Coordinate], shapely.LineString]):
         self.end: GeometryPointBearing = GeometryPointBearing.from_coordinates(EPSG_Type.EPSG_4326, self.EPSG_4326.coords[-2], self.EPSG_4326.coords[-1])
 
         WGS84 = geographiclib.geodesic.Geodesic.WGS84
-        inv: dict[str, float] = WGS84.Inverse(self.start.destination.EPSG_4326.y, self.start.destination.EPSG_4326.x, self.end.destination.EPSG_4326.y, self.end.destination.EPSG_4326.x)
+        inv: dict[str, float] = WGS84.Inverse(self.start.vertex.EPSG_4326.y, self.start.vertex.EPSG_4326.x, self.end.vertex.EPSG_4326.y, self.end.vertex.EPSG_4326.x)
         self.displacement: float = inv["s12"]
 
-        mid: dict[str, float] = WGS84.Direct(self.start.destination.EPSG_4326.y, self.start.destination.EPSG_4326.x, inv["azi1"], self.displacement / 2)
+        mid: dict[str, float] = WGS84.Direct(self.start.vertex.EPSG_4326.y, self.start.vertex.EPSG_4326.x, inv["azi1"], self.displacement / 2)
         self.centre = GeometryPoint(mid["lat2"], mid["lon2"], EPSG_Type.EPSG_4326)
 
     def reverse(self, in_place: bool = False) -> GeometryLineString:
